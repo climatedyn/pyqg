@@ -4,13 +4,11 @@ import warnings
 import numpy as np
 import os
 import tempfile, subprocess, shutil
+import versioneer
 
-VERSION='0.2.0'
 
 DISTNAME='pyqg'
 URL='http://github.com/pyqg/pyqg'
-# how can we make download_url automatically get the right version?
-DOWNLOAD_URL='https://github.com/pyqg/pyqg/tarball/v%s' % VERSION
 AUTHOR='pyqg team'
 AUTHOR_EMAIL='pyqg-dev@googlegroups.com'
 LICENSE='MIT'
@@ -50,6 +48,10 @@ CLASSIFIERS = [
     'Intended Audience :: Science/Research',
     'Programming Language :: Python',
     'Programming Language :: Python :: 2.7',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.6',
+    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.8',
     'Topic :: Scientific/Engineering',
     'Topic :: Scientific/Engineering :: Physics',
     'Topic :: Scientific/Engineering :: Atmospheric Science'
@@ -70,7 +72,7 @@ with open(use_pyfftw_file, 'wb') as f:
         f.write(b'DEF PYQG_USE_PYFFTW = 1')
     except ImportError:
         f.write(b'DEF PYQG_USE_PYFFTW = 0')
-        warnings.warn('Could not import pyfftw. Model will be slow.')
+        warnings.warn('Could not import pyfftw. Model may be slower.')
 
 # check for openmp following
 # http://stackoverflow.com/questions/16549893/programatically-testing-for-openmp-support-from-a-python-setup-script
@@ -138,12 +140,12 @@ ext_module = Extension(
 )
 
 setup(name=DISTNAME,
-      version=VERSION,
+      version=versioneer.get_version(),
+      cmdclass=versioneer.get_cmdclass(),
       description=DESCRIPTION,
       classifiers=CLASSIFIERS,
       long_description=LONG_DESCRIPTION,
       url=URL,
-      download_url=DOWNLOAD_URL,
       author=AUTHOR,
       author_email=AUTHOR_EMAIL,
       license=LICENSE,
