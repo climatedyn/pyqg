@@ -1,4 +1,3 @@
-from __future__ import print_function
 """Utility functions for pyqg model data."""
 
 import numpy as np
@@ -75,7 +74,7 @@ def calc_ispec(model, ph):
 
     # create radial wavenumber
     dkr = np.sqrt(model.dk**2 + model.dl**2)
-    kr =  np.arange(dkr/2.,kmax+dkr,dkr)
+    kr =  np.arange(1.5*dkr,kmax+dkr,dkr)
     phr = np.zeros(kr.size)
 
     for i in range(kr.size):

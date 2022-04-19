@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy as np
 from numpy import pi
 from . import model
@@ -83,9 +82,9 @@ class QGModel(model.Model):
         delta : number
             Layer thickness ratio (H1/H2)
         U1 : number
-            Upper layer flow. Units: m/s
+            Upper layer flow. Units: meters seconds :sup:`-1`
         U2 : number
-            Lower layer flow. Units: m/s
+            Lower layer flow. Units: meters seconds :sup:`-1`
         """
 
         # physical
@@ -99,7 +98,7 @@ class QGModel(model.Model):
         #self.filterfac = filterfac
 
 
-        super(QGModel, self).__init__(nz=2, **kwargs)
+        super().__init__(nz=2, **kwargs)
 
         # initial conditions: (PV anomalies)
         self.set_q1q2(
@@ -238,38 +237,61 @@ class QGModel(model.Model):
         # fix for delta.neq.1
         self.Jpxi = self._advect(self.xi, self.u, self.v)
 
+    def _calc_parameterization_spectrum(self, dqh1=None, dqh2=None):
+        if dqh1 is None: dqh1 = self.dqh[0]
+        if dqh2 is None: dqh2 = self.dqh[1]
+        del1 = self.del1
+        del2 = self.del2
+        F1 = self.F1
+        F2 = self.F2
+        wv2 = self.wv2
+        ph = self.ph
+        return np.real(
+            (del1 / (wv2 + F1 + F2) * (-(wv2 + F2) * dqh1 - F1 * dqh2) * np.conj(ph[0])) +
+            (del2 / (wv2 + F1 + F2) * (-F2 * dqh1 - (wv2 + F1) * dqh2) * np.conj(ph[1])) +
+            (del1 * F1 / (wv2 + F1 + F2) * (dqh2 - dqh1) * np.conj(ph[0] - ph[1]))
+        )
+
     def _initialize_model_diagnostics(self):
         """Extra diagnostics for two-layer model"""
 
         self.add_diagnostic('entspec',
             description='barotropic enstrophy spectrum',
             function= (lambda self:
-                      np.abs(self.del1*self.qh[0] + self.del2*self.qh[1])**2.)
+                      np.abs(self.del1*self.qh[0] + self.del2*self.qh[1])**2.),
+            units='',
+            dims=('l','k')
         )
 
         self.add_diagnostic('APEflux',
             description='spectral flux of available potential energy',
             function= (lambda self:
               self.rd**-2 * self.del1*self.del2 *
-              np.real((self.ph[0]-self.ph[1])*np.conj(self.Jptpc)) )
-        )
+              np.real((self.ph[0]-self.ph[1])*np.conj(self.Jptpc)) ),
+            units='',
+            dims=('l','k')
+       )
 
         self.add_diagnostic('KEflux',
             description='spectral flux of kinetic energy',
             function= (lambda self:
               np.real(self.del1*self.ph[0]*np.conj(self.Jpxi[0])) +
-              np.real(self.del2*self.ph[1]*np.conj(self.Jpxi[1])) )
-        )
+              np.real(self.del2*self.ph[1]*np.conj(self.Jpxi[1])) ),
+            units='',
+            dims=('l','k')
+       )
 
         self.add_diagnostic('APEgenspec',
-            description='spectrum of APE generation',
+            description='spectrum of available potential energy generation',
             function= (lambda self: self.U * self.rd**-2 * self.del1 * self.del2 *
                        np.real(1j*self.k*(self.del1*self.ph[0] + self.del2*self.ph[1]) *
-                                  np.conj(self.ph[0] - self.ph[1])) )
-        )
+                                  np.conj(self.ph[0] - self.ph[1])) ),
+            units='',
+            dims=('l','k')
+       )
 
         self.add_diagnostic('APEgen',
-            description='total APE generation',
+            description='total available potential energy generation',
             function= (lambda self: self.U * self.rd**-2 * self.del1 * self.del2 *
                        np.real((1j*self.k*
                             (self.del1*self.ph[0] + self.del2*self.ph[1]) *
@@ -277,7 +299,34 @@ class QGModel(model.Model):
                               +(1j*self.k[:,1:-2]*
                             (self.del1*self.ph[0,:,1:-2] + self.del2*self.ph[1,:,1:-2]) *
                             np.conj(self.ph[0,:,1:-2] - self.ph[1,:,1:-2])).sum()) /
-                            (self.M**2) )
+                            (self.M**2) ),
+            units='',
+            dims=('time',)
+       )
+
+        def parameterization_spectrum(m):
+            spectrum = np.zeros_like(m.wv2)
+
+            if m.uv_parameterization is not None:
+                ik = np.asarray(m._ik).reshape((1, -1)).repeat(m.wv2.shape[0], axis=0)
+                il = np.asarray(m._il).reshape((-1, 1)).repeat(m.wv2.shape[-1], axis=-1)
+                dqh1 = (-il * m.duh[0] + ik * m.dvh[0])
+                dqh2 = (-il * m.duh[1] + ik * m.dvh[1])
+                if m.q_parameterization is not None:
+                    dqh1 += m.dqh[0]
+                    dqh2 += m.dqh[1]
+                spectrum += m._calc_parameterization_spectrum(dqh1, dqh2)
+
+            elif m.q_parameterization is not None:
+                spectrum += m._calc_parameterization_spectrum(*m.dqh)
+
+            return spectrum
+
+        self.add_diagnostic('paramspec',
+            description='Spectral contribution of subgrid parameterization (if present)',
+            function=parameterization_spectrum,
+            units='',
+            dims=('l','k')
         )
 
         ### These generic diagnostics are now calculated in model.py ###

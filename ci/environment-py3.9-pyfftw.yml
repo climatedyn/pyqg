@@ -1,12 +1,10 @@
-name: pyqg_test_env
+name: test_env_pyqg
 channels:
-# for pyfftw
-#  - mforbes # old, doesn't support 3.5
-#  - nanshe # broke
   - conda-forge
 dependencies:
-  - python=2.7
+  - python=3.9
   - numpy
+  - xarray
   - scipy
   - cython
   - pyfftw

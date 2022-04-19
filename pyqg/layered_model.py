@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy as np
 from numpy import pi
 from . import model
@@ -72,10 +71,10 @@ class LayeredModel(model.Model):
 
     def __init__(
         self,
-        g = 9.81,
         beta = 1.5e-11,             # gradient of coriolis parameter
-        nz = 4,                     # number of layers
+        nz = 3,                     # number of layers
         rd = 15000.0,               # deformation radius
+        f = 0.0001236812857687059,  # coriolis parameter [s^-1]
         H = None,                   # layer thickness
         U = None,                   # zonal base state flow
         V = None,                   # meridional base state flow
@@ -99,9 +98,9 @@ class LayeredModel(model.Model):
             Layer thickness ratio (H1/H2). Only necessary for the
             two-layer (nz=2) case. Unitless.
         U : list of size nz
-            Base state zonal velocity. Units: meters s :sup:`-1`
+            Base state zonal velocity. Units: meters seconds :sup:`-1`
         V : array of size nz
-            Base state meridional velocity. Units: meters s :sup:`-1`
+            Base state meridional velocity. Units: meters seconds :sup:`-1`
         H : array of size nz
             Layer thickness. Units: meters
         rho: array of size nz.
@@ -110,19 +109,27 @@ class LayeredModel(model.Model):
         """
 
         # physical
-        self.g = g
         self.beta = beta
         self.rd = rd
         self.delta = delta
+
+        if U is None: U = (np.arange(nz) * 0.025)[::-1]
+        if V is None: V = np.zeros(nz)
+        if H is None: H = [500] + [1750 for _ in range(nz-1)]
+        if rho is None: rho = np.arange(nz) * 0.3 + 1025
+
         self.Ubg = np.array(U)
         self.Vbg = np.array(V)
         self.Hi = np.array(H)
         self.rhoi = np.array(rho)
 
-        super(LayeredModel, self).__init__(nz=nz, **kwargs)
+        super().__init__(nz=nz, f=f, **kwargs)
 
         self.vertical_modes()
 
+        self.set_q(1e-7*np.vstack([
+            np.random.randn(self.nx,self.ny)[np.newaxis,]
+            for _ in range(nz)]))
 
     ### PRIVATE METHODS - not meant to be called by user ###
 
@@ -275,48 +282,75 @@ class LayeredModel(model.Model):
         self.add_diagnostic('entspec',
                 description='barotropic enstrophy spectrum',
                 function= (lambda self:
-                    np.abs((self.Hi[:,np.newaxis,np.newaxis]*self.qh).sum(axis=0))**2/self.H) )
+                    np.abs((self.Hi[:,np.newaxis,np.newaxis]*self.qh).sum(axis=0))**2/self.H),
+                units='',
+                dims=('l','k')
+        )
 
         self.add_diagnostic('KEspec_modal',
-                description='modal KE spectra',
+                description='modal kinetic energy spectra',
                 function= (lambda self:
-                    self.wv2*(np.abs(self.phn)**2)/self.M**2 ))
+                    self.wv2*(np.abs(self.phn)**2)/self.M**2 ),
+                units='',
+                dims=('lev','l','k')
+        )
 
         self.add_diagnostic('PEspec_modal',
-                description='modal PE spectra',
+                description='modal potential energy spectra',
                 function= (lambda self:
-                    self.kdi2[1:,np.newaxis,np.newaxis]*(np.abs(self.phn[1:,:,:])**2)/self.M**2 ))
-
+                    self.kdi2[1:,np.newaxis,np.newaxis]*(np.abs(self.phn[1:,:,:])**2)/self.M**2),
+                units='',
+                dims=('lev_mid','l','k')
+        )
+        
         self.add_diagnostic('APEspec',
                 description='available potential energy spectrum',
                 function= (lambda self:
                            (self.f2gpi*
-                            np.abs(self.ph[:-1]-self.ph[1:])**2).sum(axis=0)/self.H))
-
-        self.add_diagnostic('KEflux',
+                            np.abs(self.ph[:-1]-self.ph[1:])**2).sum(axis=0)/self.H),
+                units='',
+                dims=('l','k')
+        )
+        
+        self.add_diagnostic('KEflux_div',
                     description='spectral divergence of flux of kinetic energy',
                     function =(lambda self: (self.Hi[:,np.newaxis,np.newaxis]*
-                               (self.ph.conj()*self.Jpxi).real).sum(axis=0)/self.H))
-
-        self.add_diagnostic('APEflux',
+                               (self.ph.conj()*self.Jpxi).real).sum(axis=0)/self.H),
+                units='',
+                dims=('l','k')
+        )
+        
+        self.add_diagnostic('APEflux_div',
                     description='spectral divergence of flux of available potential energy',
                     function =(lambda self: (self.Hi[:,np.newaxis,np.newaxis]*
-                               (self.ph.conj()*self.JSp).real).sum(axis=0)/self.H))
-
+                               (self.ph.conj()*self.JSp).real).sum(axis=0)/self.H),
+                units='',
+                dims=('l','k')
+        )
+        
         self.add_diagnostic('APEgenspec',
                     description='the spectrum of the rate of generation of available potential energy',
                     function =(lambda self: (self.Hi[:,np.newaxis,np.newaxis]*
                                 (self.Ubg[:,np.newaxis,np.newaxis]*self.k +
                                  self.Vbg[:,np.newaxis,np.newaxis]*self.l)*
-                                (1j*self.ph.conj()*self.Sph).real).sum(axis=0)/self.H))
+                                (1j*self.ph.conj()*self.Sph).real).sum(axis=0)/self.H),
+                units='',
+                dims=('l','k')
+        )
 
         self.add_diagnostic('ENSflux',
                  description='barotropic enstrophy flux',
                  function = (lambda self: (-self.Hi[:,np.newaxis,np.newaxis]*
-                              (self.qh.conj()*self.Jq).real).sum(axis=0)/self.H))
+                              (self.qh.conj()*self.Jq).real).sum(axis=0)/self.H),
+                units='',
+                dims=('l','k')
+        )
 
         self.add_diagnostic('ENSgenspec',
                     description='the spectrum of the rate of generation of barotropic enstrophy',
                     function = (lambda self:
                             -(self.Hi[:,np.newaxis,np.newaxis]*((self.ikQy -
-                            self.ilQx)*(self.Sph.conj()*self.ph)).real).sum(axis=0)/self.H))
+                            self.ilQx)*(self.Sph.conj()*self.ph)).real).sum(axis=0)/self.H),
+                units='',
+                dims=('l','k')
+        )

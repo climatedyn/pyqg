@@ -1,9 +1,13 @@
-name: pyqg_test_env
+name: test_env_pyqg
+channels:
+  - conda-forge
 dependencies:
-  - python=3.6
+  - python=3.8
   - numpy
+  - xarray
   - scipy
   - cython
+  - pyfftw
   - pytest
   - future
   - pip:

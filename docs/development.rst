@@ -124,44 +124,62 @@ install it, check the version, and tear down the virtual environment.
 
 .. code-block:: bash
 
-    $ conda create --yes -n test_env python=2.7 pip nose numpy cython scipy nose
-    $ conda install --yes -n test_env -c nanshe pyfftw
+    $ conda create --yes -n test_env python=3.9 pip nose numpy cython scipy nose
+    $ conda install --yes -n test_env -c conda-forge pyfftw
     $ source activate test_env
     $ pip install pyqg
     $ python -c 'import pyqg; print(pyqg.__version__);'
-    $ source deactivate
+    $ conda deactivate
     $ conda env remove --yes -n test_env
 
 Release Procedure
 =================
 
 Once we are ready for a new release, someone needs to make a pull request which
-updates the version number in setup.py. Also make sure that whats-new.rst in
-the docs is up to date.
+updates `docs/whats-new.rst` in preparation for the new version.  Then, you can
+simply create a new `release`_ in Github, adding a new tag for the new version
+(following `semver`_) and clicking "Auto-generate release notes" to summarize
+changes since the last release (with further elaboration if necessary).
 
-After the new version number PR has been merged, create a new `release`_ in
-github.
+After the release is created, a new version should be published to `pypi`_
+automatically.
 
-The step of publishing to `pypi`_ has to be done manually from the command line.
-(Note: I figured out how this works from these `instructions`_).
-After the new release has been created, do the following.
+However, before creating the release, it's worth checking `testpypi`_ to ensure
+the new version works. You can do that by:
+
+1. Verifying the `most recent test publish`_ succeeded (and is for the most
+   recent commit)
+
+1. Finding the corresponding pre-release version in pyqg's `TestPyPI history`_
+   (should look like `X.Y.Z.devN`)
+
+1. Installing that version locally as follows:
 
 .. code-block:: bash
 
-    $ cd pyqg
-    $ git fetch upstream
-    $ git checkout master
-    $ git rebease upstream/master
-    # test the release before publishing
-    $ python setup.py register -r pypitest
-    $ python setup.py sdist upload -r pypitest
-    # if that goes well, publish it
-    $ python setup.py register -r pypi
-    $ python setup.py sdist upload -r pypi
+    # Create a temporary directory with a fresh conda environment
+    $ mkdir ~/tmp
+    $ cd ~/tmp
+    $ conda create --yes -n test_env python=3.9 pip nose numpy cython scipy nose setuptools setuptools_scm
+    $ source activate test_env
+    $ pip install pyfftw # or install with conda-forge
+    
+    # Install the latest pre-release version of pyqg
+    $ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ --no-cache-dir pyqg==X.Y.Z.devN
 
-Note that pypi will not let you publish the same release twice, so make sure
-you get it right!
+    # Ensure this imports successfully and prints out the pre-release version (X.Y.Z.devN)
+    $ python -c 'import pyqg; print(pyqg.__version__);'
 
+    # Clean up and remove the test environment
+    $ conda deactivate
+    $ conda env remove --yes -n test_env
+
+If this all works, then you should be ready to create the Github `release`_.
+
+.. _testpypi: https://packaging.python.org/en/latest/guides/using-testpypi
 .. _pypi: https://pypi.python.org/pypi/pyqg
 .. _release: https://help.github.com/articles/creating-releases/
 .. _instructions: http://peterdowns.com/posts/first-time-with-pypi.html
+.. _semver: https://semver.org/
+.. _most recent test publish: https://github.com/pyqg/pyqg/actions/workflows/publish-to-test-pypi.yml
+.. _TestPyPI history: https://test.pypi.org/project/pyqg/#history

@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
-from __future__ import print_function
 import numpy as np
 from numpy import pi
 import logging
 import warnings
 
+from .errors import DiagnosticNotFilledError
 from .kernel import PseudoSpectralKernel, tendency_forward_euler, tendency_ab2, tendency_ab3
 try:
     import mkl
@@ -26,7 +25,7 @@ class Model(PseudoSpectralKernel):
     nx, ny : int
         Number of real space grid points in the `x`, `y` directions (cython)
     nk, nl : int
-        Number of spectal space grid points in the `k`, `l` directions (cython)
+        Number of spectral space grid points in the `k`, `l` directions (cython)
     nz : int
         Number of vertical levels (cython)
     kk, ll : real array
@@ -81,6 +80,18 @@ class Model(PseudoSpectralKernel):
         Vertical pressure modes (unitless)
     radii :  real array
         Deformation radii  (units: model length)
+    q_parameterization : function
+        Optional function which takes the model as input and returns a `numpy`
+        array of shape (`nz`, `ny`, `nx`) to be added to dq/dt before stepping
+        forward. This can be used to implement subgrid forcing
+        parameterizations.
+    uv_parameterization : function
+        Optional function which takes the model as input and returns a tuple of
+        two `numpy` arrays, each of shape (`nz`, `ny`, `nx`), to be added to
+        the zonal and meridional velocity derivatives (respectively) at each
+        timestep. This can also be used to implemented subgrid forcing
+        parameterizations, but expressed in terms of velocity rather than
+        potential vorticity.
     """
 
     def __init__(
@@ -105,6 +116,8 @@ class Model(PseudoSpectralKernel):
         f = None,                   # coriolis parameter (not necessary for two-layer model
                                     #  if deformation radius is provided)
         g= 9.81,                    # acceleration due to gravity
+        q_parameterization=None,    # subgrid parameterization in terms of q
+        uv_parameterization=None,   # subgrid parameterization in terms of u,v
         # diagnostics parameters
         diagnostics_list='all',     # which diagnostics to output
         # fft parameters
@@ -155,6 +168,18 @@ class Model(PseudoSpectralKernel):
         ntd : int
             Number of threads to use. Should not exceed the number of cores on
             your machine.
+        q_parameterization : function
+            Optional function which takes the model as input and returns a `numpy`
+            array of shape (`nz`, `ny`, `nx`) to be added to dq/dt before stepping
+            forward. This can be used to implement subgrid forcing
+            parameterizations.
+        uv_parameterization : function
+            Optional function which takes the model as input and returns a tuple of
+            two `numpy` arrays, each of shape (`nz`, `ny`, `nx`), to be added to
+            the zonal and meridional velocity derivatives (respectively) at each
+            timestep. This can also be used to implemented subgrid forcing
+            parameterizations, but expressed in terms of velocity rather than
+            potential vorticity.
         """
 
         if ny is None:
@@ -164,7 +189,9 @@ class Model(PseudoSpectralKernel):
 
         # TODO: be more clear about what attributes are cython and what
         # attributes are python
-        PseudoSpectralKernel.__init__(self, nz, ny, nx, ntd)
+        PseudoSpectralKernel.__init__(self, nz, ny, nx, ntd,
+                has_q_param=int(q_parameterization is not None),
+                has_uv_param=int(uv_parameterization is not None))
 
         self.L = L
         self.W = W
@@ -189,6 +216,10 @@ class Model(PseudoSpectralKernel):
         if f:
             self.f = f
             self.f2 = f**2
+
+        # optional subgrid parameterizations
+        self.q_parameterization = q_parameterization
+        self.uv_parameterization = uv_parameterization
 
         # TODO: make this less complicated!
         # Really we just need to initialize the grid here. It's not necessary
@@ -263,7 +294,7 @@ class Model(PseudoSpectralKernel):
         return pt
 
     def stability_analysis(self,bottom_friction=False):
-        """ Performs the baroclinic linear instability analysis given
+        r""" Performs the baroclinic linear instability analysis given
                 given the base state velocity :math: `(U, V)` and
                 the stretching matrix  :math: `S`:
 
@@ -355,6 +386,14 @@ class Model(PseudoSpectralKernel):
 
         self._do_external_forcing()
         # apply external forcing
+
+        if self.uv_parameterization is not None:
+            self._do_uv_subgrid_parameterization()
+            # apply velocity subgrid forcing term, if present
+
+        if self.q_parameterization is not None:
+            self._do_q_subgrid_parameterization()
+            # apply potential vorticity subgrid forcing term, if present
 
         self._calc_diagnostics()
         # do what has to be done with diagnostics
@@ -570,30 +609,64 @@ class Model(PseudoSpectralKernel):
 
     def _initialize_core_diagnostics(self):
         """Diagnostics common to all models."""
+       
         self.add_diagnostic('Ensspec',
             description='enstrophy spectrum',
-            function= (lambda self: np.abs(self.qh)**2/self.M**2)
+            function= (lambda self: np.abs(self.qh)**2/self.M**2),
+            units='',
+            dims=('lev','l','k')         
         )
 
         self.add_diagnostic('KEspec',
-            description=' kinetic energy spectrum',
-            function=(lambda self: self.wv2*np.abs(self.ph)**2/self.M**2)
+            description='kinetic energy spectrum',
+            function= (lambda self: self.wv2*np.abs(self.ph)**2/self.M**2),
+            units='',
+            dims=('lev','l','k')  
         )      # factor of 2 to account for the fact that we have only half of
                #    the Fourier coefficients.
 
-        self.add_diagnostic('q',
-            description='QGPV',
-            function= (lambda self: self.q)
-        )
-
         self.add_diagnostic('EKEdiss',
             description='total energy dissipation by bottom drag',
-            function= (lambda self: self.Hi[-1]/self.H*self.rek*(self.v[-1]**2 + self.u[-1]**2).mean())
+            function= (lambda self: self.Hi[-1]/self.H*self.rek*(self.v[-1]**2 + self.u[-1]**2).mean()),
+            units='',
+            dims=('time',)
         )
 
         self.add_diagnostic('EKE',
             description='mean eddy kinetic energy',
-            function= (lambda self: 0.5*(self.v**2 + self.u**2).mean(axis=-1).mean(axis=-1))
+            function= (lambda self: 0.5*(self.v**2 + self.u**2).mean(axis=-1).mean(axis=-1)),
+            units='',
+            dims=('lev',)
+        )
+
+        def dissipation_spectrum(m):
+            spectrum = np.zeros_like(m.qh)
+            ones = np.ones_like(m.filtr)
+            if m.ablevel==0:
+                # forward euler
+                dt1 = m.dt
+                dt2 = 0.0
+                dt3 = 0.0
+            elif m.ablevel==1:
+                # AB2 at step 2
+                dt1 = 1.5*m.dt
+                dt2 = -0.5*m.dt
+                dt3 = 0.0
+            else:
+                # AB3 from step 3 on
+                dt1 = 23./12.*m.dt
+                dt2 = -16./12.*m.dt
+                dt3 = 5./12.*m.dt
+            for k in range(m.nz):
+                spectrum[k] = (m.filtr - ones) * (
+                    m.qh[k] + dt1*m.dqhdt[k] + dt2*m.dqhdt_p[k] + dt3*m.dqhdt_pp[k])
+            return -np.real(np.tensordot(m.Hi, np.conj(m.ph) * spectrum, axes = (0, 0))) / m.H / m.dt
+
+        self.add_diagnostic('Dissspec',
+            description='Spectral contribution of filter dissipation',
+            function=dissipation_spectrum,
+            units='meters squared second ^-3',
+            dims=('l','k')
         )
 
     def _calc_derived_fields(self):
@@ -608,7 +681,7 @@ class Model(PseudoSpectralKernel):
         for d in self.diagnostics:
             self.diagnostics[d]['active'] == (d in diagnostics_list)
 
-    def add_diagnostic(self, diag_name, description=None, units=None, function=None):
+    def add_diagnostic(self, diag_name, description=None, function=None, units=None, dims=None):
         # create a new diagnostic dict and add it to the object array
 
         # make sure the function is callable
@@ -621,6 +694,7 @@ class Model(PseudoSpectralKernel):
         self.diagnostics[diag_name] = {
            'description': description,
            'units': units,
+           'dims': dims,
            'active': True,
            'count': 0,
            'function': function, }
@@ -651,6 +725,8 @@ class Model(PseudoSpectralKernel):
                 self.diagnostics[dname]['count'] += 1
 
     def get_diagnostic(self, dname):
+        if 'value' not in self.diagnostics[dname]:
+            raise DiagnosticNotFilledError(dname)
         return (self.diagnostics[dname]['value'] /
                 self.diagnostics[dname]['count'])
 
@@ -662,14 +738,22 @@ class Model(PseudoSpectralKernel):
         var_dens[...,-1] = var_dens[...,-1]/2.
         return var_dens.sum()
 
-
     def set_qh(self, qh):
         warnings.warn("Method deprecated. Set model.qh directly instead. ",
             DeprecationWarning)
         self.qh = qh
 
-
     def set_q(self, q):
         warnings.warn("Method deprecated. Set model.q directly instead. ",
             DeprecationWarning)
         self.q = q
+
+    def to_dataset(self):
+        """Convert outputs from model to an xarray dataset
+        
+        Returns
+        -------
+        ds : xarray.Dataset
+        """
+        from .xarray_output import model_to_dataset
+        return model_to_dataset(self)

@@ -5,7 +5,7 @@
 pyqg: Python Quasigeostrophic Model
 ===================================
 
-|DOI| |pypi| |Build Status| |codecov| |docs| |binder|
+|DOI| |conda| |pypi| |Build Status| |codecov| |docs| |binder|
 
 pyqg is a python solver for quasigeostrophic systems. Quasigeostophic
 equations are an approximation to the full fluid equations of motion in
@@ -20,7 +20,7 @@ for clear documentation and thorough testing.
 pyqg supports a variety of different configurations using the same
 computational kernel. The different configurations are evolving and are
 described in detail in the documentation. The kernel, implement in
-cython, uses a pseudo-spectral method which is heavily dependent of the
+cython, uses a pseudo-spectral method which is heavily dependent on the
 fast Fourier transform. For this reason, pyqg tries to use pyfftw and
 the FFTW Fourier Transform library. (If pyfftw is not available, it
 falls back on numpy.fft) With pyfftw, the kernel is multi-threaded but
@@ -37,17 +37,19 @@ Links
 
 .. |DOI| image:: https://zenodo.org/badge/14957/pyqg/pyqg.svg
    :target: https://zenodo.org/badge/latestdoi/14957/pyqg/pyqg
-.. |Build Status| image:: https://travis-ci.org/pyqg/pyqg.svg?branch=master
-   :target: https://travis-ci.org/pyqg/pyqg
+.. |Build Status| image:: https://github.com/pyqg/pyqg/actions/workflows/ci.yaml/badge.svg
+   :target: https://github.com/pyqg/pyqg/actions/workflows/ci.yaml
 .. |codecov| image:: https://codecov.io/github/pyqg/pyqg/coverage.svg?branch=master
    :target: https://codecov.io/github/pyqg/pyqg?branch=master
 .. |pypi| image:: https://badge.fury.io/py/pyqg.svg
    :target: https://badge.fury.io/py/pyqg
+.. |conda| image:: https://img.shields.io/conda/vn/conda-forge/pyqg.svg
+   :target: https://anaconda.org/conda-forge/pyqg
 .. |landscape| image:: https://landscape.io/github/pyqg/pyqg/master/landscape.svg?style=flat
    :target: https://landscape.io/github/pyqg/pyqg/master
    :alt: Code Health
-.. |binder| image:: http://mybinder.org/badge.svg
-   :target: http://mybinder.org/repo/crocha700/pyqg
+.. |binder| image:: https://mybinder.org/badge_logo.svg
+   :target: https://mybinder.org/v2/gh/pyqg/pyqg/HEAD
 .. |docs| image:: http://readthedocs.org/projects/pyqg/badge/?version=stable
    :target: http://pyqg.readthedocs.org/en/stable/?badge=stable
    :alt: Documentation Status

@@ -4,8 +4,6 @@ import warnings
 import numpy as np
 import os
 import tempfile, subprocess, shutil
-import versioneer
-
 
 DISTNAME='pyqg'
 URL='http://github.com/pyqg/pyqg'
@@ -36,9 +34,9 @@ Optimal performance will be achieved on a single system with many cores.
 Links
 -----
 
-- HTML documentation: http://pyqg.readthedocs.org
-- Issue tracker: http://github.com/pyqg/pyqg/issues
-- Source code: http://github.com/pyqg/pyqg
+- HTML documentation: https://pyqg.readthedocs.io
+- Issue tracker: https://github.com/pyqg/pyqg/issues
+- Source code: https://github.com/pyqg/pyqg
 """
 
 CLASSIFIERS = [
@@ -47,11 +45,12 @@ CLASSIFIERS = [
     'Operating System :: OS Independent',
     'Intended Audience :: Science/Research',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 2.7',
     'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3 :: Only',
     'Programming Language :: Python :: 3.6',
     'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
     'Topic :: Scientific/Engineering',
     'Topic :: Scientific/Engineering :: Physics',
     'Topic :: Scientific/Engineering :: Atmospheric Science'
@@ -61,7 +60,8 @@ CLASSIFIERS = [
 ### Dependency section ###
 install_requires = [
     'cython',
-    'numpy'
+    'numpy',
+    'pyfftw'
 ]
 
 # This hack tells cython whether pyfftw is present
@@ -101,8 +101,11 @@ def check_for_openmp():
     with open(filename, 'wb', 0) as file:
         file.write(omp_test)
     with open(os.devnull, 'wb') as fnull:
-        result = subprocess.call([cc, '-fopenmp', filename],
-                                 stdout=fnull, stderr=fnull)
+        try:
+            result = subprocess.call([cc, '-fopenmp', filename],
+                                     stdout=fnull, stderr=fnull)
+        except FileNotFoundError:
+            result = 1
     print('check_for_openmp() result: ', result)
     os.chdir(curdir)
     #clean up
@@ -132,6 +135,11 @@ def readme():
     with open('README.md') as f:
         return f.read()
 
+def local_scheme(version):
+    """Skip the local version (eg. +xyz of 0.6.1.dev4+gdf99fe2)
+    to be able to upload to Test PyPI"""
+    return ""
+
 ext_module = Extension(
     "pyqg.kernel",
     ["pyqg/kernel.pyx"],
@@ -140,8 +148,6 @@ ext_module = Extension(
 )
 
 setup(name=DISTNAME,
-      version=versioneer.get_version(),
-      cmdclass=versioneer.get_cmdclass(),
       description=DESCRIPTION,
       classifiers=CLASSIFIERS,
       long_description=LONG_DESCRIPTION,
@@ -151,6 +157,9 @@ setup(name=DISTNAME,
       license=LICENSE,
       packages=['pyqg'],
       install_requires=install_requires,
+      setup_requires=["setuptools_scm"],
+      use_scm_version={"local_scheme": local_scheme},
+      python_requires='>=3.6',
       ext_modules = cythonize(ext_module),
       include_dirs = [np.get_include()],
       tests_require = tests_require,
