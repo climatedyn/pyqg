@@ -40,7 +40,13 @@ expected_diags = [
     'ENSflux',
     'ENSgenspec',
     'paramspec',
+    'paramspec_APEflux',
+    'paramspec_KEflux',
     'Dissspec',
+    'KEfrictionspec',
+    'ENSDissspec',
+    'ENSfrictionspec',
+    'ENSparamspec',
 ]
 
 expected_attrs = [

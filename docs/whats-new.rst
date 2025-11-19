@@ -1,8 +1,28 @@
 What's New
 ==========
 
-v0.5.1 (unreleased)
--------------------
+v0.7.2 (19 May 2022)
+--------------------
+- Temporarily removes subgrid forcing method
+
+v0.7.1 (17 May 2022)
+--------------------
+- Fixes packaging bug
+
+v0.7.0 (16 May 2022)
+--------------------
+- Allow parameterizations as first-class objects
+- Add an initial library of parameterizations
+- Add tools for comparing diagnostics
+- Add a method for computing subgrid forcing
+
+v0.6.0 (16 May 2022)
+--------------------
+- Generalize definition of parameterization spectrum diagnostic
+- Add enstrophy budget diagnostics
+- Normalize and unitize all diagnostics
+- Fix issues with calculating isotropic spectra
+- Other refactors and bug fixes
 
 v0.5.0 (23 Mar. 2022)
 ---------------------
